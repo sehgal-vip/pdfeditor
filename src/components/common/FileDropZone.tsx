@@ -186,13 +186,14 @@ export function FileDropZone({ onFilesLoaded, multiple = false }: FileDropZonePr
         >
           + Add more files
         </button>
-        <input ref={inputRef} type="file" accept=".pdf" multiple className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+        <input ref={inputRef} type="file" accept=".pdf" multiple className="sr-only" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      <input ref={inputRef} type="file" accept=".pdf" multiple={multiple} className="sr-only" onChange={(e) => { if (e.target.files) handleFiles(e.target.files); e.target.value = ''; }} />
       <div
         className={`relative border-2 border-dashed rounded-xl min-h-[200px] flex flex-col items-center justify-center gap-3 p-8 transition-colors cursor-pointer ${
           isDragOver ? 'border-indigo-400 bg-indigo-50' : error ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-gray-400'
@@ -239,7 +240,6 @@ export function FileDropZone({ onFilesLoaded, multiple = false }: FileDropZonePr
             </p>
           </>
         )}
-        <input ref={inputRef} type="file" accept=".pdf" multiple={multiple} className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
       </div>
 
       {/* Recent files */}

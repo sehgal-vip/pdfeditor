@@ -31,7 +31,7 @@ export default defineConfig({
       },
     }),
   ],
-  base: '/',
+  base: '/pdfeditor/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

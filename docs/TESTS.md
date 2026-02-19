@@ -19,6 +19,10 @@
 | F-UP-11 | Keyboard Enter opens file picker | Tab to drop zone > press Enter | File picker opens (ARIA `role="button"` contract) |
 | F-UP-12 | Keyboard Space opens file picker | Tab to drop zone > press Space | File picker opens (ARIA `role="button"` contract) |
 | F-UP-13 | Click to browse works on Safari | Click drop zone on Safari / iOS Safari | File picker opens (requires `sr-only`, not `display:none`) |
+| F-UP-14 | Click-to-browse works on all tools | Navigate to each tool page > click drop zone | File picker opens on all 15 tools using FileDropZone |
+| F-UP-15 | Multiple mode: no React setState-during-render | Upload file in Merge (multiple mode) | No console error "Cannot update a component while rendering" |
+| F-UP-16 | ConvertToPDF drop zone keyboard accessible | Tab to Convert to PDF drop zone > press Enter or Space | File picker opens (same fix as FileDropZone) |
+| F-UP-17 | ConvertToPDF drop zone works on Safari | Click Convert to PDF drop zone on Safari | File picker opens (sr-only, not hidden) |
 
 #### Known Issues (Fixed)
 
@@ -27,6 +31,8 @@
 | F-UP-BUG-01 | Keyboard Enter/Space did not open file picker | Drop zone used `<label>` with `role="button"` + `tabIndex={0}` but no `onKeyDown` handler. Native `<label>` does not respond to Enter/Space like `<button>` does — WCAG violation. | Replaced `<label htmlFor>` with `<div onClick>` + explicit `onKeyDown` for Enter/Space. |
 | F-UP-BUG-02 | Click to browse may fail on Safari | File input used `className="hidden"` (`display:none`), which prevents label-triggered activation on Safari/iOS. | Changed to `className="sr-only"` (visually hidden but browser-accessible). |
 | F-UP-BUG-03 | Child elements could accidentally open file picker | Password form "Unlock" button and error "Try again" button used `e.preventDefault()` (label-specific). | Changed to `e.stopPropagation()` to properly prevent click bubbling to the parent div's `onClick`. |
+| F-UP-BUG-04 | React "Cannot update a component while rendering" in multiple mode | `onFilesLoaded(next)` was called inside `setLoadedFiles` updater function, triggering parent state update during render. | Moved `onFilesLoaded` call outside the updater — updater runs synchronously so the computed `next` is available immediately after. |
+| F-UP-BUG-05 | ConvertToPDF drop zone had same 3 bugs as FileDropZone | Used `<label>` without keyboard handling, `className="hidden"` on input, no ARIA attributes. | Applied same fixes: `<div>` + `onClick` + `onKeyDown` + `role="button"` + `aria-label`, `sr-only` input, `tabIndex={-1}`. |
 
 ### 1.2 Split PDF Tool
 

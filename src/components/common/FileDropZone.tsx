@@ -101,11 +101,12 @@ export function FileDropZone({ onFilesLoaded, multiple = false }: FileDropZonePr
       });
 
       if (multiple) {
+        let next: UploadedFile[] = [];
         setLoadedFiles((prev) => {
-          const next = [...prev, uploaded];
-          onFilesLoaded(next);
+          next = [...prev, uploaded];
           return next;
         });
+        onFilesLoaded(next);
       } else {
         setLoadedFiles([uploaded]);
         onFilesLoaded([uploaded]);
@@ -147,11 +148,12 @@ export function FileDropZone({ onFilesLoaded, multiple = false }: FileDropZonePr
   };
 
   const removeFile = (id: string) => {
+    let next: UploadedFile[] = [];
     setLoadedFiles((prev) => {
-      const next = prev.filter((f) => f.id !== id);
-      onFilesLoaded(next);
+      next = prev.filter((f) => f.id !== id);
       return next;
     });
+    onFilesLoaded(next);
   };
 
   if (loadedFiles.length > 0 && !multiple) {

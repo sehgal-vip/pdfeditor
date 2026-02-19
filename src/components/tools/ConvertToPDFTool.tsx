@@ -156,15 +156,16 @@ export function ConvertToPDFTool() {
         type="file"
         accept={ACCEPTED_EXTENSIONS}
         multiple
-        className="hidden"
+        tabIndex={-1}
+        className="sr-only"
         onChange={(e) => {
-          if (e.target.files) handleAddFiles(e.target.files);
+          if (e.target.files && e.target.files.length > 0) handleAddFiles(e.target.files);
           e.target.value = '';
         }}
       />
 
       {inputFiles.length === 0 ? (
-        <label
+        <div
           className={`relative border-2 border-dashed rounded-xl min-h-[200px] flex flex-col items-center justify-center gap-3 p-8 transition-colors cursor-pointer ${
             isDragOver
               ? 'border-indigo-400 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-950'
@@ -174,6 +175,10 @@ export function ConvertToPDFTool() {
           onDragLeave={() => setIsDragOver(false)}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
+          tabIndex={0}
+          role="button"
+          aria-label="Upload files for conversion"
         >
           <Upload size={32} className="text-gray-400 dark:text-gray-500" />
           <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -182,7 +187,7 @@ export function ConvertToPDFTool() {
           <p className="text-xs text-gray-400 dark:text-gray-500">
             Supports JPG, PNG, WebP, GIF, DOCX, and TXT
           </p>
-        </label>
+        </div>
       ) : (
         <div className="space-y-2">
           {/* File list */}

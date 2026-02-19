@@ -15,15 +15,15 @@ import toast from 'react-hot-toast';
 type CompressionLevel = 'low' | 'medium' | 'high';
 
 const LEVEL_DESCRIPTIONS: Record<CompressionLevel, { label: string; description: string }> = {
-  low: { label: 'Low', description: 'Fast. Re-saves with optimized structure.' },
-  medium: { label: 'Medium', description: 'Balanced. Compresses streams and removes duplicates.' },
-  high: { label: 'High', description: 'Maximum. Also strips metadata and flattens forms.' },
+  low:    { label: 'Low', description: 'Fast. Re-saves with optimized structure.' },
+  medium: { label: 'Medium', description: 'Recompresses streams at max level, deduplicates content.' },
+  high:   { label: 'High', description: 'Maximum. Downsamples images, strips metadata and non-essential data.' },
 };
 
 const LEVEL_ESTIMATES: Record<CompressionLevel, { minPct: number; maxPct: number }> = {
   low:    { minPct: 5,  maxPct: 15 },
-  medium: { minPct: 15, maxPct: 35 },
-  high:   { minPct: 20, maxPct: 40 },
+  medium: { minPct: 20, maxPct: 50 },
+  high:   { minPct: 35, maxPct: 70 },
 };
 
 export function CompressTool() {

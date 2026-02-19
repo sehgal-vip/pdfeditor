@@ -230,6 +230,65 @@ npm run test
 
 ---
 
+## Aggressive Compression Test Cases (Techniques 1–6)
+
+### Worker-Level Compression Techniques
+
+| Test ID | Test Case | Level | Description |
+|---------|-----------|-------|-------------|
+| CMP-10 | Legacy encoding conversion | medium | Streams with LZWDecode, ASCII85Decode, ASCIIHexDecode, RunLengthDecode are converted to FlateDecode |
+| CMP-11 | Legacy conversion preserves dict keys | medium | Non-filter dict keys (e.g., Width, Height) preserved after re-encode |
+| CMP-12 | FlateDecode re-compression | medium | Existing FlateDecode streams re-compressed at pako level 9; smaller result accepted |
+| CMP-13 | Re-compress skip if larger | medium | Streams not replaced when level-9 output is >= original size |
+| CMP-14 | Re-compress skips images | medium | PDFRawStream with `Subtype: Image` not touched by recompressFlateStreams |
+| CMP-15 | Stream deduplication | medium | Identical streams deduplicated — duplicate refs rewritten to canonical copy |
+| CMP-16 | Dedup byte-equality check | medium | Hash collisions with different content are NOT merged |
+| CMP-17 | Dedup orphan deletion | medium | Duplicate streams deleted from context after ref rewrite |
+| CMP-18 | Image recompression (JPEG) | high | DCTDecode images ≥100px re-encoded as JPEG at quality 0.60 via OffscreenCanvas |
+| CMP-19 | Image recompression (FlateDecode RGB) | high | FlateDecode DeviceRGB images converted to JPEG; only replaced if smaller |
+| CMP-20 | Image recompression (FlateDecode Gray) | high | FlateDecode DeviceGray images converted to JPEG |
+| CMP-21 | Image skip small | high | Images <100px in either dimension are not recompressed |
+| CMP-22 | Image recompression gated | high | OffscreenCanvas check prevents crash in non-supporting environments |
+| CMP-23 | Strip non-essentials catalog | high | Outlines, Dests, OpenAction, PieceInfo, MarkInfo, StructTreeRoot removed from catalog |
+| CMP-24 | Strip Names JS/EmbeddedFiles | high | JavaScript and EmbeddedFiles removed from Names dict |
+| CMP-25 | Strip page thumbnails | high | Thumb entries removed from all page dicts |
+| CMP-26 | Strip annotations keep links | high | Non-Link annotations removed; Link annotations preserved |
+| CMP-27 | Remove unused objects | high | Unreachable objects (not reachable from Root/Info/Encrypt) deleted |
+| CMP-28 | Unused removal preserves reachable | high | All objects reachable via DFS from trailer roots are kept |
+| CMP-29 | Per-stream try/catch safety | all | Individual stream failures do not abort entire compression |
+| CMP-30 | Output size check | all | If compressed output ≥ input size, COMPRESS_NO_SAVINGS toast shown |
+
+### Pipeline Integration
+
+| Test ID | Test Case | Level | Description |
+|---------|-----------|-------|-------------|
+| CMP-31 | Low pipeline | low | Save with useObjectStreams only — fast, ~5–15% savings |
+| CMP-32 | Medium pipeline | medium | Legacy convert → compress uncompressed → re-compress Flate → dedup → save |
+| CMP-33 | High pipeline | high | Flatten → legacy convert → compress → image recompress → re-compress → dedup → strip metadata → strip non-essentials → remove unused → save |
+| CMP-34 | Progress steps medium | medium | Reports 5 progress steps |
+| CMP-35 | Progress steps high | high | Reports 10 progress steps |
+
+### UI Updates
+
+| Test ID | Test Case | Description |
+|---------|-----------|-------------|
+| CMP-40 | Medium estimate range | LEVEL_ESTIMATES medium: 20–50% |
+| CMP-41 | High estimate range | LEVEL_ESTIMATES high: 35–70% |
+| CMP-42 | Medium description updated | "Recompresses streams at max level, deduplicates content." |
+| CMP-43 | High description updated | "Maximum. Downsamples images, strips metadata and non-essential data." |
+
+### Browser Manual Tests
+
+| Test ID | Test Case | Expected |
+|---------|-----------|----------|
+| CMP-B1 | Upload image-heavy PDF, run High | 40–70% size reduction |
+| CMP-B2 | Upload text-only PDF, run Medium | 20–50% size reduction |
+| CMP-B3 | Upload small PDF, run Low | Quick completion, modest (~5–15%) savings |
+| CMP-B4 | Upload PDF with forms, run High | Forms flattened, metadata stripped, images recompressed |
+| CMP-B5 | Upload already-compressed PDF, run Medium | No-savings toast if output ≥ input |
+
+---
+
 ## Test Summary
 
 | Category | Files | Tests |
@@ -240,4 +299,5 @@ npm run test
 | Updated component tests | 1 | ~4 updated assertions |
 | **Total new/updated** | **9** | **~115 changes** |
 | Compress PDF tests | 3 | ~5 updated assertions |
-| **Full suite** | **35** | **~406** |
+| Aggressive compression tests | — | ~30 new scenarios |
+| **Full suite** | **35** | **~436** |

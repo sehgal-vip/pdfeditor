@@ -1,4 +1,11 @@
-import { PDFDocument, degrees, StandardFonts, rgb, PDFName, PDFRawStream, PDFRef, PDFDict } from 'pdf-lib-with-encrypt';
+import {
+  PDFDocument, degrees, StandardFonts, rgb,
+  PDFName, PDFRawStream, PDFRef, PDFDict,
+  PDFArray, PDFNumber, PDFStream,
+  decodePDFRawStream,
+} from 'pdf-lib-with-encrypt';
+// @ts-expect-error pako has no type declarations
+import pako from 'pako';
 
 interface WorkerRequest {
   id: string;
@@ -1123,7 +1130,9 @@ operations['convert-to-pdf'] = async (_pdfBytes, options, onProgress, isCancelle
 
         for (const run of runs) {
           const font = getFont(run.bold || (block.type === 'heading'), run.italic);
-          const runWords = run.text.split(/(\s+)/);
+          // Replace control characters (tabs, etc.) that WinAnsi cannot encode
+          const sanitizedText = run.text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').replace(/\t/g, '    ');
+          const runWords = sanitizedText.split(/(\s+)/);
           for (const w of runWords) {
             if (w.length === 0) continue;
             words.push({
@@ -1356,6 +1365,454 @@ operations['edit-pdf'] = async (pdfBytes, options, onProgress) => {
   };
 };
 
+// ─── Compression Helper Functions ───────────────────────────────────────────
+
+const LEGACY_FILTERS = new Set(['LZWDecode', 'ASCII85Decode', 'ASCIIHexDecode', 'RunLengthDecode']);
+
+/** Technique 1: Convert legacy encodings → FlateDecode */
+function convertLegacyEncodings(context: any): void {
+  const indirectObjects = context.enumerateIndirectObjects();
+  for (const [ref, obj] of indirectObjects) {
+    if (!(obj instanceof PDFRawStream)) continue;
+    try {
+      const dict = obj.dict;
+      const filter = dict.get(PDFName.of('Filter'));
+      if (!filter) continue;
+      const filterName = filter instanceof PDFName ? filter.decodeText() : '';
+      if (!LEGACY_FILTERS.has(filterName)) continue;
+
+      // Decode using pdf-lib's built-in decoder
+      const decoded = decodePDFRawStream(obj);
+      const rawBytes = decoded.decode();
+
+      // Re-encode with pako at max compression
+      const compressed = pako.deflate(rawBytes, { level: 9 });
+
+      // Build new dict preserving all keys except Filter, DecodeParms, Length
+      const newDict = PDFDict.withContext(context);
+      const entries = dict.entries();
+      for (const [key, value] of entries) {
+        const keyStr = key instanceof PDFName ? key.decodeText() : '';
+        if (keyStr === 'Filter' || keyStr === 'DecodeParms' || keyStr === 'Length') continue;
+        newDict.set(key, value);
+      }
+      newDict.set(PDFName.of('Filter'), PDFName.of('FlateDecode'));
+      newDict.set(PDFName.of('Length'), PDFNumber.of(compressed.length));
+
+      const newStream = PDFRawStream.of(newDict, compressed);
+      context.assign(ref as PDFRef, newStream);
+    } catch {
+      // Skip streams that fail to convert
+    }
+  }
+}
+
+/** Technique 2: Re-compress FlateDecode streams at level 9 */
+function recompressFlateStreams(context: any): void {
+  const indirectObjects = context.enumerateIndirectObjects();
+  for (const [ref, obj] of indirectObjects) {
+    if (!(obj instanceof PDFRawStream)) continue;
+    try {
+      const dict = obj.dict;
+      const filter = dict.get(PDFName.of('Filter'));
+      if (!filter || !(filter instanceof PDFName)) continue;
+      if (filter.decodeText() !== 'FlateDecode') continue;
+
+      // Skip image XObjects — handled separately
+      const subtype = dict.get(PDFName.of('Subtype'));
+      if (subtype instanceof PDFName && subtype.decodeText() === 'Image') continue;
+
+      // Decode existing content
+      const decoded = decodePDFRawStream(obj);
+      const rawBytes = decoded.decode();
+
+      // Re-compress at maximum level
+      const recompressed = pako.deflate(rawBytes, { level: 9 });
+
+      // Only replace if we actually saved space
+      if (recompressed.length >= obj.contents.length) continue;
+
+      const newDict = PDFDict.withContext(context);
+      const entries = dict.entries();
+      for (const [key, value] of entries) {
+        const keyStr = key instanceof PDFName ? key.decodeText() : '';
+        if (keyStr === 'Length') continue;
+        newDict.set(key, value);
+      }
+      newDict.set(PDFName.of('Length'), PDFNumber.of(recompressed.length));
+
+      const newStream = PDFRawStream.of(newDict, recompressed);
+      context.assign(ref as PDFRef, newStream);
+    } catch {
+      // Skip streams that fail to recompress
+    }
+  }
+}
+
+/** FNV-1a hash for stream deduplication */
+function fnv1aHash(data: Uint8Array): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < data.length; i++) {
+    hash ^= data[i];
+    hash = (hash * 0x01000193) >>> 0;
+  }
+  return hash;
+}
+
+/** Rewrite PDFRef values in a PDFDict using a ref mapping */
+function rewriteRefsInDict(dict: any, mapping: Map<string, any>): void {
+  const entries = dict.entries();
+  for (const [key, value] of entries) {
+    if (value instanceof PDFRef) {
+      const replacement = mapping.get(value.toString());
+      if (replacement) dict.set(key, replacement);
+    } else if (value instanceof PDFDict) {
+      rewriteRefsInDict(value, mapping);
+    } else if (value instanceof PDFArray) {
+      rewriteRefsInArray(value, mapping);
+    }
+  }
+}
+
+/** Rewrite PDFRef values in a PDFArray using a ref mapping */
+function rewriteRefsInArray(arr: any, mapping: Map<string, any>): void {
+  const size = arr.size();
+  for (let i = 0; i < size; i++) {
+    const value = arr.get(i);
+    if (value instanceof PDFRef) {
+      const replacement = mapping.get(value.toString());
+      if (replacement) arr.set(i, replacement);
+    } else if (value instanceof PDFDict) {
+      rewriteRefsInDict(value, mapping);
+    } else if (value instanceof PDFArray) {
+      rewriteRefsInArray(value, mapping);
+    }
+  }
+}
+
+/** Technique 3: Deduplicate identical streams */
+function deduplicateStreams(context: any): void {
+  // Phase 1: Hash all streams
+  const hashMap = new Map<string, { ref: any; contents: Uint8Array }[]>();
+  const indirectObjects = context.enumerateIndirectObjects();
+
+  for (const [ref, obj] of indirectObjects) {
+    if (!(obj instanceof PDFRawStream)) continue;
+    try {
+      const contents = obj.contents;
+      const hash = fnv1aHash(contents);
+      const key = `${hash}:${contents.length}`;
+      if (!hashMap.has(key)) hashMap.set(key, []);
+      hashMap.get(key)!.push({ ref: ref as PDFRef, contents });
+    } catch {
+      // Skip
+    }
+  }
+
+  // Phase 2: Find true duplicates and build ref mapping
+  const refMapping = new Map<string, any>();
+  const toDelete: any[] = [];
+
+  for (const group of hashMap.values()) {
+    if (group.length < 2) continue;
+
+    // Verify byte-equality within the group
+    const canonical = group[0];
+    for (let i = 1; i < group.length; i++) {
+      const other = group[i];
+      if (other.contents.length !== canonical.contents.length) continue;
+
+      let equal = true;
+      for (let j = 0; j < canonical.contents.length; j++) {
+        if (canonical.contents[j] !== other.contents[j]) { equal = false; break; }
+      }
+      if (equal) {
+        refMapping.set(other.ref.toString(), canonical.ref);
+        toDelete.push(other.ref);
+      }
+    }
+  }
+
+  if (refMapping.size === 0) return;
+
+  // Phase 3: Rewrite all references
+  const allObjects = context.enumerateIndirectObjects();
+  for (const [, obj] of allObjects) {
+    if (obj instanceof PDFDict) {
+      rewriteRefsInDict(obj, refMapping);
+    } else if (obj instanceof PDFArray) {
+      rewriteRefsInArray(obj, refMapping);
+    } else if (obj instanceof PDFRawStream) {
+      rewriteRefsInDict(obj.dict, refMapping);
+    }
+  }
+
+  // Phase 4: Delete orphaned duplicates
+  for (const ref of toDelete) {
+    try { context.delete(ref); } catch { /* skip */ }
+  }
+}
+
+/** Technique 4: Image recompression via OffscreenCanvas */
+async function recompressImages(
+  context: any,
+  quality: number,
+  maxDim: number,
+): Promise<void> {
+  if (typeof OffscreenCanvas === 'undefined') return;
+
+  const indirectObjects = context.enumerateIndirectObjects();
+  const imageEntries: [any, any][] = [];
+
+  for (const [ref, obj] of indirectObjects) {
+    if (!(obj instanceof PDFRawStream)) continue;
+    const dict = obj.dict;
+    const subtype = dict.get(PDFName.of('Subtype'));
+    if (!(subtype instanceof PDFName) || subtype.decodeText() !== 'Image') continue;
+
+    const width = dict.get(PDFName.of('Width'));
+    const height = dict.get(PDFName.of('Height'));
+    if (!width || !height) continue;
+
+    const w = width instanceof PDFNumber ? width.asNumber() : 0;
+    const h = height instanceof PDFNumber ? height.asNumber() : 0;
+    if (w < 100 || h < 100) continue; // Skip small images
+
+    imageEntries.push([ref as PDFRef, obj]);
+  }
+
+  // Process images sequentially to manage memory
+  for (const [ref, obj] of imageEntries) {
+    try {
+      const dict = obj.dict;
+      const filter = dict.get(PDFName.of('Filter'));
+      const filterName = filter instanceof PDFName ? filter.decodeText() : '';
+
+      const width = (dict.get(PDFName.of('Width')) as any).asNumber();
+      const height = (dict.get(PDFName.of('Height')) as any).asNumber();
+
+      let bitmap: ImageBitmap | null = null;
+
+      if (filterName === 'DCTDecode') {
+        // JPEG image — create blob from raw contents
+        const blob = new Blob([obj.contents], { type: 'image/jpeg' });
+        bitmap = await createImageBitmap(blob);
+      } else if (filterName === 'FlateDecode') {
+        // FlateDecode image — decode pixel data and convert to ImageData
+        try {
+          const decoded = decodePDFRawStream(obj);
+          const rawBytes = decoded.decode();
+
+          const bpc = dict.get(PDFName.of('BitsPerComponent'));
+          const bpcVal = bpc instanceof PDFNumber ? bpc.asNumber() : 8;
+          if (bpcVal !== 8) continue; // Only handle 8-bit
+
+          const colorSpace = dict.get(PDFName.of('ColorSpace'));
+          const csName = colorSpace instanceof PDFName ? colorSpace.decodeText() : '';
+
+          let rgbaData: Uint8ClampedArray;
+
+          if (csName === 'DeviceRGB') {
+            rgbaData = new Uint8ClampedArray(width * height * 4);
+            for (let i = 0, j = 0; i < width * height; i++, j += 3) {
+              rgbaData[i * 4] = rawBytes[j];
+              rgbaData[i * 4 + 1] = rawBytes[j + 1];
+              rgbaData[i * 4 + 2] = rawBytes[j + 2];
+              rgbaData[i * 4 + 3] = 255;
+            }
+          } else if (csName === 'DeviceGray') {
+            rgbaData = new Uint8ClampedArray(width * height * 4);
+            for (let i = 0; i < width * height; i++) {
+              rgbaData[i * 4] = rawBytes[i];
+              rgbaData[i * 4 + 1] = rawBytes[i];
+              rgbaData[i * 4 + 2] = rawBytes[i];
+              rgbaData[i * 4 + 3] = 255;
+            }
+          } else {
+            continue; // Skip unsupported color spaces (CMYK, ICCBased, etc.)
+          }
+
+          const imageData = new ImageData(rgbaData as unknown as Uint8ClampedArray<ArrayBuffer>, width, height);
+          bitmap = await createImageBitmap(imageData);
+        } catch {
+          continue; // Skip if decoding fails
+        }
+      } else {
+        continue; // Skip other filter types
+      }
+
+      if (!bitmap) continue;
+
+      // Calculate target dimensions respecting maxDim
+      let targetW = bitmap.width;
+      let targetH = bitmap.height;
+      if (targetW > maxDim || targetH > maxDim) {
+        const scale = maxDim / Math.max(targetW, targetH);
+        targetW = Math.round(targetW * scale);
+        targetH = Math.round(targetH * scale);
+      }
+
+      // Draw to OffscreenCanvas and encode as JPEG
+      const canvas = new OffscreenCanvas(targetW, targetH);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { bitmap.close(); continue; }
+
+      ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+      bitmap.close();
+
+      const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
+      const jpegBytes = new Uint8Array(await blob.arrayBuffer());
+
+      // Only replace if the JPEG is smaller
+      if (jpegBytes.length >= obj.contents.length) continue;
+
+      // Build new image dict
+      const newDict = PDFDict.withContext(context);
+      newDict.set(PDFName.of('Type'), PDFName.of('XObject'));
+      newDict.set(PDFName.of('Subtype'), PDFName.of('Image'));
+      newDict.set(PDFName.of('Width'), PDFNumber.of(targetW));
+      newDict.set(PDFName.of('Height'), PDFNumber.of(targetH));
+      newDict.set(PDFName.of('ColorSpace'), PDFName.of('DeviceRGB'));
+      newDict.set(PDFName.of('BitsPerComponent'), PDFNumber.of(8));
+      newDict.set(PDFName.of('Filter'), PDFName.of('DCTDecode'));
+      newDict.set(PDFName.of('Length'), PDFNumber.of(jpegBytes.length));
+
+      const newStream = PDFRawStream.of(newDict, jpegBytes);
+      context.assign(ref, newStream);
+    } catch {
+      // Skip images that fail to recompress
+    }
+  }
+}
+
+/** Technique 5: Strip non-essential catalog and page-level data */
+function stripNonEssentials(
+  pdfDoc: any,
+  context: any,
+): void {
+  // Strip catalog-level entries
+  try {
+    const catalog = context.lookup(context.trailerInfo.Root) as PDFDict;
+    if (!catalog) return;
+
+    const catalogKeysToRemove = ['Outlines', 'Dests', 'OpenAction', 'PieceInfo', 'MarkInfo', 'StructTreeRoot'];
+    for (const key of catalogKeysToRemove) {
+      try { catalog.delete(PDFName.of(key)); } catch { /* skip */ }
+    }
+
+    // Strip from Names dict
+    const namesDict = catalog.get(PDFName.of('Names'));
+    if (namesDict instanceof PDFDict) {
+      try { namesDict.delete(PDFName.of('JavaScript')); } catch { /* skip */ }
+      try { namesDict.delete(PDFName.of('EmbeddedFiles')); } catch { /* skip */ }
+    }
+  } catch {
+    // Ignore catalog-level failures
+  }
+
+  // Strip page-level entries
+  const pages = pdfDoc.getPages();
+  for (const page of pages) {
+    try {
+      const pageDict = page.node;
+
+      // Remove thumbnails
+      try { pageDict.delete(PDFName.of('Thumb')); } catch { /* skip */ }
+
+      // Filter annotations: keep only Link subtype
+      const annots = pageDict.get(PDFName.of('Annots'));
+      if (annots instanceof PDFArray) {
+        const keepAnnots: unknown[] = [];
+        for (let i = 0; i < annots.size(); i++) {
+          try {
+            const annotRef = annots.get(i);
+            const annot = annotRef instanceof PDFRef ? context.lookup(annotRef) : annotRef;
+            if (annot instanceof PDFDict) {
+              const subtype = annot.get(PDFName.of('Subtype'));
+              if (subtype instanceof PDFName && subtype.decodeText() === 'Link') {
+                keepAnnots.push(annotRef);
+              }
+            }
+          } catch { /* skip */ }
+        }
+        if (keepAnnots.length === 0) {
+          pageDict.delete(PDFName.of('Annots'));
+        } else {
+          // Rebuild the array with only link annotations
+          const newAnnots = PDFArray.withContext(context);
+          for (const a of keepAnnots) {
+            newAnnots.push(a as PDFRef);
+          }
+          pageDict.set(PDFName.of('Annots'), newAnnots);
+        }
+      }
+    } catch {
+      // Skip page-level failures
+    }
+  }
+}
+
+/** DFS helper to collect all reachable PDFRefs from an object */
+function collectRefs(
+  obj: unknown,
+  visited: Set<string>,
+  context: any,
+): void {
+  if (!obj) return;
+
+  if (obj instanceof PDFRef) {
+    const key = obj.toString();
+    if (visited.has(key)) return;
+    visited.add(key);
+    try {
+      const resolved = context.lookup(obj);
+      collectRefs(resolved, visited, context);
+    } catch { /* skip */ }
+    return;
+  }
+
+  if (obj instanceof PDFDict) {
+    const entries = obj.entries();
+    for (const [, value] of entries) {
+      collectRefs(value, visited, context);
+    }
+    return;
+  }
+
+  if (obj instanceof PDFArray) {
+    for (let i = 0; i < obj.size(); i++) {
+      collectRefs(obj.get(i), visited, context);
+    }
+    return;
+  }
+
+  if (obj instanceof PDFRawStream || obj instanceof PDFStream) {
+    collectRefs((obj as any).dict, visited, context);
+    return;
+  }
+}
+
+/** Technique 6: Remove unused objects via DFS from trailer roots */
+function removeUnusedObjects(context: any): void {
+  const visited = new Set<string>();
+
+  // Walk from all trailer roots
+  const trailerInfo = context.trailerInfo;
+  if (trailerInfo.Root) collectRefs(trailerInfo.Root, visited, context);
+  if (trailerInfo.Info) collectRefs(trailerInfo.Info, visited, context);
+  if (trailerInfo.Encrypt) collectRefs(trailerInfo.Encrypt, visited, context);
+
+  // Delete every indirect object not in the reachable set
+  const allObjects = context.enumerateIndirectObjects();
+  for (const [ref] of allObjects) {
+    if (!visited.has((ref as PDFRef).toString())) {
+      try { context.delete(ref as PDFRef); } catch { /* skip */ }
+    }
+  }
+}
+
+// ─── Compress Operation ─────────────────────────────────────────────────────
+
 /**
  * compress — Compress a PDF to reduce file size.
  *
@@ -1369,13 +1826,17 @@ operations['compress'] = async (pdfBytes, options, onProgress) => {
   const stripMetadata = level === 'high' ? true : (options.stripMetadata as boolean) ?? false;
   const flattenForms = level === 'high' ? true : (options.flattenForms as boolean) ?? false;
 
-  onProgress({ step: 'Loading PDF', current: 0, total: 4 });
+  const totalSteps = level === 'high' ? 10 : level === 'medium' ? 5 : 1;
+  let step = 0;
+
+  onProgress({ step: 'Loading PDF', current: step, total: totalSteps });
 
   const pdfDoc = await PDFDocument.load(pdfBytes[0]);
+  const context = pdfDoc.context;
 
-  // Step 1: Flatten forms if requested
+  // ── HIGH: Step 1 — Flatten forms ──
   if (flattenForms) {
-    onProgress({ step: 'Flattening forms', current: 1, total: 4 });
+    onProgress({ step: 'Flattening forms', current: ++step, total: totalSteps });
     try {
       const form = pdfDoc.getForm();
       form.flatten();
@@ -1384,17 +1845,20 @@ operations['compress'] = async (pdfBytes, options, onProgress) => {
     }
   }
 
-  // Step 2: Compress uncompressed streams (medium and high)
+  // ── MEDIUM+HIGH: Convert legacy encodings → FlateDecode (Technique 1) ──
   if (level === 'medium' || level === 'high') {
-    onProgress({ step: 'Compressing streams', current: 2, total: 4 });
-    const context = pdfDoc.context;
-    const indirectObjects = context.enumerateIndirectObjects();
+    onProgress({ step: 'Converting legacy encodings', current: ++step, total: totalSteps });
+    try { convertLegacyEncodings(context); } catch { /* skip */ }
+  }
 
+  // ── MEDIUM+HIGH: Compress uncompressed streams (existing) ──
+  if (level === 'medium' || level === 'high') {
+    onProgress({ step: 'Compressing streams', current: ++step, total: totalSteps });
+    const indirectObjects = context.enumerateIndirectObjects();
     for (const [ref, obj] of indirectObjects) {
       if (obj instanceof PDFRawStream) {
         const dict = obj.dict;
         const filter = dict.get(PDFName.of('Filter'));
-        // Only compress streams that have no filter (uncompressed)
         if (!filter) {
           try {
             const contents = obj.contents;
@@ -1408,10 +1872,27 @@ operations['compress'] = async (pdfBytes, options, onProgress) => {
     }
   }
 
-  // Step 3: Strip metadata if requested
+  // ── HIGH: Image recompression via OffscreenCanvas (Technique 4) ──
+  if (level === 'high') {
+    onProgress({ step: 'Recompressing images', current: ++step, total: totalSteps });
+    try { await recompressImages(context, 0.60, 2048); } catch { /* skip */ }
+  }
+
+  // ── MEDIUM+HIGH: Re-compress FlateDecode at level 9 (Technique 2) ──
+  if (level === 'medium' || level === 'high') {
+    onProgress({ step: 'Optimizing compressed streams', current: ++step, total: totalSteps });
+    try { recompressFlateStreams(context); } catch { /* skip */ }
+  }
+
+  // ── MEDIUM+HIGH: Deduplicate identical streams (Technique 3) ──
+  if (level === 'medium' || level === 'high') {
+    onProgress({ step: 'Deduplicating streams', current: ++step, total: totalSteps });
+    try { deduplicateStreams(context); } catch { /* skip */ }
+  }
+
+  // ── Strip metadata if requested ──
   if (stripMetadata) {
-    onProgress({ step: 'Stripping metadata', current: 3, total: 4 });
-    // Clear info dict fields
+    onProgress({ step: 'Stripping metadata', current: ++step, total: totalSteps });
     pdfDoc.setTitle('');
     pdfDoc.setAuthor('');
     pdfDoc.setSubject('');
@@ -1419,9 +1900,8 @@ operations['compress'] = async (pdfBytes, options, onProgress) => {
     pdfDoc.setCreator('');
     pdfDoc.setProducer('');
 
-    // Remove XMP metadata stream from catalog
     try {
-      const catalog = pdfDoc.context.lookup(pdfDoc.context.trailerInfo.Root) as PDFDict;
+      const catalog = context.lookup(context.trailerInfo.Root) as PDFDict;
       if (catalog && catalog.get(PDFName.of('Metadata'))) {
         catalog.delete(PDFName.of('Metadata'));
       }
@@ -1430,8 +1910,20 @@ operations['compress'] = async (pdfBytes, options, onProgress) => {
     }
   }
 
-  // Step 4: Save with object streams enabled
-  onProgress({ step: 'Saving compressed PDF', current: 4, total: 4 });
+  // ── HIGH: Strip non-essentials (Technique 5) ──
+  if (level === 'high') {
+    onProgress({ step: 'Stripping non-essential data', current: ++step, total: totalSteps });
+    try { stripNonEssentials(pdfDoc, context); } catch { /* skip */ }
+  }
+
+  // ── HIGH: Remove unused objects (Technique 6 — run last) ──
+  if (level === 'high') {
+    onProgress({ step: 'Removing unused objects', current: ++step, total: totalSteps });
+    try { removeUnusedObjects(context); } catch { /* skip */ }
+  }
+
+  // ── Save with object streams ──
+  onProgress({ step: 'Saving compressed PDF', current: totalSteps, total: totalSteps });
   const saved = await pdfDoc.save({ useObjectStreams: true });
 
   return {

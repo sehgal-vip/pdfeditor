@@ -133,7 +133,27 @@
 | F-MD-02 | Clear all metadata | Click "Clear all metadata" | Output PDF has empty metadata fields |
 | F-MD-03 | Set keywords | Enter "report, 2024, finance" > Save | Keywords stored in PDF metadata |
 
-### 1.15 Pipeline System
+### 1.15 Compress PDF Tool
+
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| F-CP-01 | Upload PDF and see all 4 compression levels | Upload any PDF | Radio buttons for Low, Medium, High, and Extra High are shown |
+| F-CP-02 | Low compression | Upload PDF > select Low > Compress | Output PDF is smaller; minimal processing (re-save with optimized structure) |
+| F-CP-03 | Medium compression | Upload PDF > select Medium > Compress | Output PDF ~20–50% smaller; streams recompressed and deduplicated |
+| F-CP-04 | High compression | Upload PDF > select High > Compress | Output PDF ~35–70% smaller; images downsampled, metadata stripped |
+| F-CP-05 | Extra High compression | Upload PDF > select Extra High > Compress | Output PDF ~70–90% smaller; images grayscale + aggressively compressed |
+| F-CP-06 | Extra High warning shown | Select Extra High compression level | Amber warning text about grayscale conversion and quality loss appears |
+| F-CP-07 | Warning hidden for other levels | Select Low, Medium, or High | No amber warning about grayscale shown |
+| F-CP-08 | Options hidden for High | Select High compression | "Included in High compression" message shown; checkboxes hidden |
+| F-CP-09 | Options hidden for Extra High | Select Extra High compression | "Included in Extra High compression" message shown; checkboxes hidden |
+| F-CP-10 | Options visible for Low/Medium | Select Low or Medium | Strip metadata and Flatten forms checkboxes visible |
+| F-CP-11 | Estimate updates per level | Switch between levels | Estimate percentages update (Low: 5–15%, Medium: 20–50%, High: 35–70%, Extra High: 70–90%) |
+| F-CP-12 | Extra High forces stripMetadata and flattenForms | Select Extra High > Compress | Worker receives stripMetadata=true and flattenForms=true |
+| F-CP-13 | Extra High grayscale conversion | Upload image-heavy PDF > Extra High > Compress | Images in output are grayscale |
+| F-CP-14 | Extra High image quality/dimensions | Upload image-heavy PDF > Extra High > Compress | Images recompressed at quality 0.35, max dimension 1024px |
+| F-CP-15 | No savings warning | Upload already-optimized PDF > Compress | Warning toast: "Compression did not reduce file size" |
+
+### 1.16 Pipeline System
 
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|

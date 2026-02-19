@@ -12,18 +12,20 @@ import { ERRORS } from '@/lib/error-messages';
 import { formatFileSize } from '@/lib/download-utils';
 import toast from 'react-hot-toast';
 
-type CompressionLevel = 'low' | 'medium' | 'high';
+type CompressionLevel = 'low' | 'medium' | 'high' | 'extra-high';
 
 const LEVEL_DESCRIPTIONS: Record<CompressionLevel, { label: string; description: string }> = {
-  low:    { label: 'Low', description: 'Fast. Re-saves with optimized structure.' },
-  medium: { label: 'Medium', description: 'Recompresses streams at max level, deduplicates content.' },
-  high:   { label: 'High', description: 'Maximum. Downsamples images, strips metadata and non-essential data.' },
+  low:          { label: 'Low', description: 'Fast. Re-saves with optimized structure.' },
+  medium:       { label: 'Medium', description: 'Recompresses streams at max level, deduplicates content.' },
+  high:         { label: 'High', description: 'Maximum. Downsamples images, strips metadata and non-essential data.' },
+  'extra-high': { label: 'Extra High', description: 'Extreme. Converts images to grayscale, aggressively downsizes. May reduce visual quality.' },
 };
 
 const LEVEL_ESTIMATES: Record<CompressionLevel, { minPct: number; maxPct: number }> = {
-  low:    { minPct: 5,  maxPct: 15 },
-  medium: { minPct: 20, maxPct: 50 },
-  high:   { minPct: 35, maxPct: 70 },
+  low:          { minPct: 5,  maxPct: 15 },
+  medium:       { minPct: 20, maxPct: 50 },
+  high:         { minPct: 35, maxPct: 70 },
+  'extra-high': { minPct: 70, maxPct: 90 },
 };
 
 export function CompressTool() {
@@ -72,10 +74,11 @@ export function CompressTool() {
     if (!file || !canProcess) return;
 
     try {
+      const forceAll = level === 'high' || level === 'extra-high';
       const output = await workerClient.process('compress', [file.bytes], {
         level,
-        stripMetadata: level === 'high' ? true : stripMetadata,
-        flattenForms: level === 'high' ? true : flattenForms,
+        stripMetadata: forceAll ? true : stripMetadata,
+        flattenForms: forceAll ? true : flattenForms,
       });
 
       // Check if compression actually saved space
@@ -166,12 +169,19 @@ export function CompressTool() {
         </div>
       </div>
 
+      {/* Extra-high warning */}
+      {level === 'extra-high' && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Warning: Extra High compression converts all color images to grayscale and aggressively reduces quality. The output may not be suitable for print or archival use.
+        </p>
+      )}
+
       {/* Options */}
       <div className="space-y-3">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Options</label>
-        {level === 'high' ? (
+        {level === 'high' || level === 'extra-high' ? (
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            Metadata stripping and form flattening are included in High compression.
+            Metadata stripping and form flattening are included in {level === 'extra-high' ? 'Extra High' : 'High'} compression.
           </p>
         ) : (
           <div className="space-y-2">

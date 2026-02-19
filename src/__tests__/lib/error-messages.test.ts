@@ -46,4 +46,8 @@ describe('ERRORS', () => {
   it('CANNOT_DELETE_ALL mentions at least one page', () => {
     expect(ERRORS.CANNOT_DELETE_ALL).toContain('At least one page');
   });
+
+  it('has Compress PDF error messages', () => {
+    expect(ERRORS.COMPRESS_NO_SAVINGS).toBeTruthy();
+  });
 });

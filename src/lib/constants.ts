@@ -15,6 +15,7 @@ import { UnlockTool } from '@/components/tools/UnlockTool';
 import { MetadataEditorTool } from '@/components/tools/MetadataEditorTool';
 import { ConvertToPDFTool } from '@/components/tools/ConvertToPDFTool';
 import { EditPDFTool } from '@/components/tools/EditPDFTool';
+import { CompressTool } from '@/components/tools/CompressTool';
 
 const time = {
   split: (p: number) => 0.5 + p * 0.01,
@@ -32,6 +33,7 @@ const time = {
   'edit-metadata': () => 0.3,
   'edit-pdf': (p: number) => 1 + p * 0.03,
   'convert-to-pdf': () => 2,
+  compress: (p: number) => 1 + p * 0.02,
 } as Record<string, (p: number, s: number) => number>;
 
 export const CATEGORIES = {
@@ -53,6 +55,7 @@ export const TOOLS: PDFTool[] = [
   { id: 'add-blank-pages', name: 'Add Blank Pages', description: 'Insert blank pages at any position', icon: 'FilePlus', category: 'organize', categoryColor: 'blue-500', acceptsMultipleFiles: false, pipelineCompatible: true, component: AddBlankPagesTool, estimateTime: time['add-blank-pages'], generateFilename: (n, o) => generateFilename('add-blank-pages', n, o) },
   { id: 'rotate', name: 'Rotate Pages', description: 'Rotate pages in any direction', icon: 'RotateCw', category: 'transform', categoryColor: 'amber-500', acceptsMultipleFiles: false, pipelineCompatible: true, component: RotateTool, estimateTime: time['rotate'], generateFilename: (n, o) => generateFilename('rotate', n, o) },
   { id: 'scale', name: 'Scale / Resize', description: 'Change page dimensions', icon: 'Maximize', category: 'transform', categoryColor: 'amber-500', acceptsMultipleFiles: false, pipelineCompatible: true, component: ScaleResizeTool, estimateTime: time['scale'], generateFilename: (n, o) => generateFilename('scale', n, o) },
+  { id: 'compress', name: 'Compress PDF', description: 'Reduce file size', icon: 'Minimize2', category: 'transform', categoryColor: 'amber-500', acceptsMultipleFiles: false, pipelineCompatible: true, component: CompressTool, estimateTime: time['compress'], generateFilename: (n, o) => generateFilename('compress', n, o) },
   { id: 'add-page-numbers', name: 'Page Numbers', description: 'Add page numbers to your document', icon: 'Hash', category: 'stamp', categoryColor: 'purple-500', acceptsMultipleFiles: false, pipelineCompatible: true, component: PageNumbersTool, estimateTime: time['add-page-numbers'], generateFilename: (n, o) => generateFilename('add-page-numbers', n, o) },
   { id: 'text-watermark', name: 'Text Watermark', description: 'Add text watermark to pages', icon: 'Type', category: 'stamp', categoryColor: 'purple-500', acceptsMultipleFiles: false, pipelineCompatible: true, component: TextWatermarkTool, estimateTime: time['text-watermark'], generateFilename: (n, o) => generateFilename('text-watermark', n, o) },
   { id: 'encrypt', name: 'Encrypt PDF', description: 'Password-protect your PDF', icon: 'Lock', category: 'security', categoryColor: 'red-500', acceptsMultipleFiles: false, pipelineCompatible: true, component: EncryptTool, estimateTime: time['encrypt'], generateFilename: (n, o) => generateFilename('encrypt', n, o) },

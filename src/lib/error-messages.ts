@@ -26,4 +26,6 @@ export const ERRORS = {
   TABLE_SIMPLIFIED: 'Tables are converted to simplified text layout.',
   CJK_NOT_SUPPORTED: 'Chinese, Japanese, and Korean characters are not supported in this version.',
   UNDERLINE_NOT_SUPPORTED: 'Underlined text will appear without underline in the converted PDF.',
+  // Compress
+  COMPRESS_NO_SAVINGS: 'The compressed file is not smaller than the original. This PDF may already be optimized.',
 } as const;

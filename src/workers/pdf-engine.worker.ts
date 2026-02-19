@@ -1,4 +1,4 @@
-import { PDFDocument, degrees, StandardFonts, rgb } from 'pdf-lib-with-encrypt';
+import { PDFDocument, degrees, StandardFonts, rgb, PDFName, PDFRawStream, PDFRef, PDFDict } from 'pdf-lib-with-encrypt';
 
 interface WorkerRequest {
   id: string;
@@ -1349,6 +1349,95 @@ operations['edit-pdf'] = async (pdfBytes, options, onProgress) => {
     files: [
       {
         name: 'edited.pdf',
+        bytes: saved.buffer as ArrayBuffer,
+        pageCount: pdfDoc.getPageCount(),
+      },
+    ],
+  };
+};
+
+/**
+ * compress — Compress a PDF to reduce file size.
+ *
+ * Options:
+ *   level: 'low' | 'medium' | 'high'
+ *   stripMetadata: boolean
+ *   flattenForms: boolean
+ */
+operations['compress'] = async (pdfBytes, options, onProgress) => {
+  const level = (options.level as 'low' | 'medium' | 'high') ?? 'medium';
+  const stripMetadata = level === 'high' ? true : (options.stripMetadata as boolean) ?? false;
+  const flattenForms = level === 'high' ? true : (options.flattenForms as boolean) ?? false;
+
+  onProgress({ step: 'Loading PDF', current: 0, total: 4 });
+
+  const pdfDoc = await PDFDocument.load(pdfBytes[0]);
+
+  // Step 1: Flatten forms if requested
+  if (flattenForms) {
+    onProgress({ step: 'Flattening forms', current: 1, total: 4 });
+    try {
+      const form = pdfDoc.getForm();
+      form.flatten();
+    } catch {
+      // No form or already flattened — ignore
+    }
+  }
+
+  // Step 2: Compress uncompressed streams (medium and high)
+  if (level === 'medium' || level === 'high') {
+    onProgress({ step: 'Compressing streams', current: 2, total: 4 });
+    const context = pdfDoc.context;
+    const indirectObjects = context.enumerateIndirectObjects();
+
+    for (const [ref, obj] of indirectObjects) {
+      if (obj instanceof PDFRawStream) {
+        const dict = obj.dict;
+        const filter = dict.get(PDFName.of('Filter'));
+        // Only compress streams that have no filter (uncompressed)
+        if (!filter) {
+          try {
+            const contents = obj.contents;
+            const compressedStream = context.flateStream(contents);
+            context.assign(ref as PDFRef, compressedStream);
+          } catch {
+            // Skip streams that fail to compress
+          }
+        }
+      }
+    }
+  }
+
+  // Step 3: Strip metadata if requested
+  if (stripMetadata) {
+    onProgress({ step: 'Stripping metadata', current: 3, total: 4 });
+    // Clear info dict fields
+    pdfDoc.setTitle('');
+    pdfDoc.setAuthor('');
+    pdfDoc.setSubject('');
+    pdfDoc.setKeywords([]);
+    pdfDoc.setCreator('');
+    pdfDoc.setProducer('');
+
+    // Remove XMP metadata stream from catalog
+    try {
+      const catalog = pdfDoc.context.lookup(pdfDoc.context.trailerInfo.Root) as PDFDict;
+      if (catalog && catalog.get(PDFName.of('Metadata'))) {
+        catalog.delete(PDFName.of('Metadata'));
+      }
+    } catch {
+      // Ignore if catalog manipulation fails
+    }
+  }
+
+  // Step 4: Save with object streams enabled
+  onProgress({ step: 'Saving compressed PDF', current: 4, total: 4 });
+  const saved = await pdfDoc.save({ useObjectStreams: true });
+
+  return {
+    files: [
+      {
+        name: 'compressed.pdf',
         bytes: saved.buffer as ArrayBuffer,
         pageCount: pdfDoc.getPageCount(),
       },

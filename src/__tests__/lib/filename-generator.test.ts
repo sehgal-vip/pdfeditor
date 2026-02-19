@@ -105,4 +105,9 @@ describe('generateFilename', () => {
     const result = generateFilename('convert-to-pdf', 'document.docx', { fileCount: 1 });
     expect(result).toBe('document.pdf');
   });
+
+  it('generates compress filename', () => {
+    const result = generateFilename('compress', 'doc.pdf');
+    expect(result).toBe('doc_compressed.pdf');
+  });
 });

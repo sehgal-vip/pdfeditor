@@ -41,6 +41,7 @@ export function generateFilename(
     unlock: '_unlocked',
     'edit-metadata': '_edited',
     'edit-pdf': '_edited',
+    compress: '_compressed',
   };
 
   const suffix = suffixMap[toolId] || '_processed';

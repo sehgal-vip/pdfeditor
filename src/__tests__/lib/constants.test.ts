@@ -20,8 +20,8 @@ vi.mock('pdfjs-dist', () => ({
 }));
 
 describe('TOOLS constants', () => {
-  it('has exactly 15 tools', () => {
-    expect(TOOLS).toHaveLength(15);
+  it('has exactly 16 tools', () => {
+    expect(TOOLS).toHaveLength(16);
   });
 
   it('each tool has required fields', () => {
@@ -52,11 +52,12 @@ describe('TOOLS constants', () => {
   });
 
   it('TOOL_MAP has all tools', () => {
-    expect(Object.keys(TOOL_MAP)).toHaveLength(15);
+    expect(Object.keys(TOOL_MAP)).toHaveLength(16);
     expect(TOOL_MAP['split'].name).toBe('Split PDF');
     expect(TOOL_MAP['merge'].name).toBe('Merge PDFs');
     expect(TOOL_MAP['edit-pdf'].name).toBe('Edit PDF');
     expect(TOOL_MAP['convert-to-pdf'].name).toBe('Convert to PDF');
+    expect(TOOL_MAP['compress'].name).toBe('Compress PDF');
   });
 });
 

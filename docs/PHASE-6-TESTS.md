@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 6 introduces 2 new tools (Edit PDF and Convert to PDF) and adds **125+ new test cases** across 6 new test files plus updates to 4 existing test files. Total test count: **401 tests** across **35 test files** (full suite).
+Phase 6 introduces 2 new tools (Edit PDF and Convert to PDF) and the Compress PDF tool, adding **130+ new test cases** across 6 new test files plus updates to 4 existing test files. Total test count: **~406 tests** across **35 test files** (full suite).
 
 ---
 
@@ -199,6 +199,18 @@ These tests specifically verify the "Top 10 Gotchas" from the implementation pla
 
 ---
 
+## Compress PDF Test Cases
+
+| Test ID | Test Case | Description |
+|---------|-----------|-------------|
+| CMP-01 | Constants includes compress tool | TOOLS array has 16 entries, TOOL_MAP has 'compress' |
+| CMP-02 | Compress tool has correct properties | id='compress', category='transform', pipelineCompatible=true |
+| CMP-03 | Filename generator compress suffix | `generateFilename('compress', 'doc.pdf')` returns `'doc_compressed.pdf'` |
+| CMP-04 | Error message COMPRESS_NO_SAVINGS | Message exists and is truthy |
+| CMP-05 | Compress tool is pipeline compatible | Not in the non-pipeline-compatible list |
+
+---
+
 ## Running Tests
 
 ```bash
@@ -227,4 +239,5 @@ npm run test
 | Updated lib tests | 3 | ~10 updated assertions |
 | Updated component tests | 1 | ~4 updated assertions |
 | **Total new/updated** | **9** | **~115 changes** |
-| **Full suite** | **35** | **401** |
+| Compress PDF tests | 3 | ~5 updated assertions |
+| **Full suite** | **35** | **~406** |

@@ -16,6 +16,17 @@
 | F-UP-08 | Upload invalid PDF (wrong magic bytes) | Upload a file renamed to .pdf | Error: "This file is not a valid PDF." |
 | F-UP-09 | Recent files appear after upload | Upload a file, reset, return to upload | "Recent files" section shows previous file |
 | F-UP-10 | Click recent file to re-use | Click a file in "Recent files" | File loads without re-upload |
+| F-UP-11 | Keyboard Enter opens file picker | Tab to drop zone > press Enter | File picker opens (ARIA `role="button"` contract) |
+| F-UP-12 | Keyboard Space opens file picker | Tab to drop zone > press Space | File picker opens (ARIA `role="button"` contract) |
+| F-UP-13 | Click to browse works on Safari | Click drop zone on Safari / iOS Safari | File picker opens (requires `sr-only`, not `display:none`) |
+
+#### Known Issues (Fixed)
+
+| ID | Issue | Root Cause | Fix |
+|----|-------|------------|-----|
+| F-UP-BUG-01 | Keyboard Enter/Space did not open file picker | Drop zone used `<label>` with `role="button"` + `tabIndex={0}` but no `onKeyDown` handler. Native `<label>` does not respond to Enter/Space like `<button>` does — WCAG violation. | Replaced `<label htmlFor>` with `<div onClick>` + explicit `onKeyDown` for Enter/Space. |
+| F-UP-BUG-02 | Click to browse may fail on Safari | File input used `className="hidden"` (`display:none`), which prevents label-triggered activation on Safari/iOS. | Changed to `className="sr-only"` (visually hidden but browser-accessible). |
+| F-UP-BUG-03 | Child elements could accidentally open file picker | Password form "Unlock" button and error "Try again" button used `e.preventDefault()` (label-specific). | Changed to `e.stopPropagation()` to properly prevent click bubbling to the parent div's `onClick`. |
 
 ### 1.2 Split PDF Tool
 

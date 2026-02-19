@@ -100,21 +100,18 @@ describe('FileDropZone', () => {
     expect(input.accept).toBe('.pdf');
   });
 
-  // 8. File input is hidden with display:none (className="hidden")
-  it('has file input with hidden class (not sr-only)', () => {
+  // 8. File input is visually hidden with sr-only class
+  it('has file input with sr-only class for accessibility', () => {
     render(<FileDropZone onFilesLoaded={onFilesLoaded} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(input.className).toContain('hidden');
-    expect(input.className).not.toContain('sr-only');
+    expect(input.className).toContain('sr-only');
   });
 
-  // 9. Drop zone uses <label> with htmlFor for native file picker
-  it('uses a <label> element with htmlFor for native file picker trigger', () => {
+  // 9. Drop zone uses <div> with explicit onClick for reliable file picker trigger
+  it('uses a <div> element with onClick handler for file picker trigger', () => {
     render(<FileDropZone onFilesLoaded={onFilesLoaded} />);
     const dropZone = screen.getByRole('button', { name: 'Upload PDF file' });
-    expect(dropZone.tagName).toBe('LABEL');
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(dropZone.getAttribute('for')).toBe(input.id);
+    expect(dropZone.tagName).toBe('DIV');
   });
 
   // 10. File input has tabIndex={-1}
@@ -255,10 +252,11 @@ describe('FileDropZone', () => {
     expect(screen.getByText(/Drop your PDF/)).toBeInTheDocument();
   });
 
-  // 19. Error state label does NOT have htmlFor (prevents opening picker)
-  it('does not link label to input in error state', async () => {
+  // 19. Error state — drop zone click does not trigger file picker
+  it('does not trigger file picker in error state', async () => {
     render(<FileDropZone onFilesLoaded={onFilesLoaded} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, 'click');
     const file = createNonPDFContentFile('bad.pdf');
     fireEvent.change(input, { target: { files: [file] } });
 
@@ -267,7 +265,9 @@ describe('FileDropZone', () => {
     });
 
     const dropZone = screen.getByRole('button', { name: 'Upload PDF file' });
-    expect(dropZone.getAttribute('for')).toBeNull();
+    fireEvent.click(dropZone);
+    expect(clickSpy).not.toHaveBeenCalled();
+    clickSpy.mockRestore();
   });
 
   // 20. Password-protected PDF shows password input

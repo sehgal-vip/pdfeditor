@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useId } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Upload, FileText, AlertCircle, Lock, X } from 'lucide-react';
 import { useFileStore } from '@/stores/fileStore';
 import type { UploadedFile } from '@/types';
@@ -20,12 +20,15 @@ export function FileDropZone({ onFilesLoaded, multiple = false }: FileDropZonePr
   const [pendingBytes, setPendingBytes] = useState<Uint8Array | null>(null);
   const [pendingName, setPendingName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const inputId = useId();
   const recentFiles = useFileStore((s) => s.recentFiles);
   const addToCache = useFileStore((s) => s.addToCache);
 
-  // Only link the label to the file input when in the default upload state
+  // Only open the file picker when in the default upload state
   const shouldOpenPicker = !loading && !error && !passwordNeeded;
+
+  const triggerFilePicker = useCallback(() => {
+    if (shouldOpenPicker) inputRef.current?.click();
+  }, [shouldOpenPicker]);
 
   const processFile = useCallback(async (file: File, pwd?: string) => {
     setLoading(true);
@@ -184,26 +187,27 @@ export function FileDropZone({ onFilesLoaded, multiple = false }: FileDropZonePr
             </button>
           </div>
         ))}
-        <label
-          htmlFor={inputId}
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
           className="block w-full p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors text-center cursor-pointer"
         >
           + Add more files
-        </label>
-        <input id={inputId} ref={inputRef} type="file" accept=".pdf" multiple tabIndex={-1} className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+        </button>
+        <input ref={inputRef} type="file" accept=".pdf" multiple tabIndex={-1} className="sr-only" onChange={(e) => { if (e.target.files && e.target.files.length > 0) handleFiles(e.target.files); e.target.value = ''; }} />
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <input id={inputId} ref={inputRef} type="file" accept=".pdf" multiple={multiple} tabIndex={-1} className="hidden" onChange={(e) => { if (e.target.files) handleFiles(e.target.files); e.target.value = ''; }} />
-      {/* Use <label htmlFor> so a single click natively opens the file picker */}
-      <label
-        htmlFor={shouldOpenPicker ? inputId : undefined}
+      <input ref={inputRef} type="file" accept=".pdf" multiple={multiple} tabIndex={-1} className="sr-only" onChange={(e) => { if (e.target.files && e.target.files.length > 0) handleFiles(e.target.files); e.target.value = ''; }} />
+      <div
         className={`relative border-2 border-dashed rounded-xl min-h-[200px] flex flex-col items-center justify-center gap-3 p-8 transition-colors cursor-pointer ${
           isDragOver ? 'border-indigo-400 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-950' : error ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
         }`}
+        onClick={triggerFilePicker}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); triggerFilePicker(); } }}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
@@ -217,10 +221,10 @@ export function FileDropZone({ onFilesLoaded, multiple = false }: FileDropZonePr
           <>
             <AlertCircle size={32} className="text-red-400" />
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-            <button onClick={(e) => { e.preventDefault(); setError(null); }} className="text-xs text-red-500 dark:text-red-400 underline">Try again</button>
+            <button onClick={(e) => { e.stopPropagation(); setError(null); }} className="text-xs text-red-500 dark:text-red-400 underline">Try again</button>
           </>
         ) : passwordNeeded ? (
-          <div className="text-center" onClick={(e) => e.preventDefault()}>
+          <div className="text-center" onClick={(e) => e.stopPropagation()}>
             <Lock size={32} className="text-amber-500 mx-auto mb-2" />
             <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">{ERRORS.ENCRYPTED_NEEDS_PASSWORD}</p>
             <div className="flex gap-2 max-w-xs mx-auto">
@@ -228,12 +232,12 @@ export function FileDropZone({ onFilesLoaded, multiple = false }: FileDropZonePr
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handlePasswordSubmit(); }}
+                onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handlePasswordSubmit(); }}
                 placeholder="Enter password"
                 className="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 autoFocus
               />
-              <button onClick={handlePasswordSubmit} className="px-4 py-2 bg-indigo-600 dark:bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-600">Unlock</button>
+              <button onClick={(e) => { e.stopPropagation(); handlePasswordSubmit(); }} className="px-4 py-2 bg-indigo-600 dark:bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-600">Unlock</button>
             </div>
           </div>
         ) : (
@@ -244,7 +248,7 @@ export function FileDropZone({ onFilesLoaded, multiple = false }: FileDropZonePr
             </p>
           </>
         )}
-      </label>
+      </div>
 
       {/* Recent files */}
       {recentFiles.length > 0 && loadedFiles.length === 0 && (

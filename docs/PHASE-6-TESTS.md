@@ -208,6 +208,10 @@ These tests specifically verify the "Top 10 Gotchas" from the implementation pla
 | CMP-03 | Filename generator compress suffix | `generateFilename('compress', 'doc.pdf')` returns `'doc_compressed.pdf'` |
 | CMP-04 | Error message COMPRESS_NO_SAVINGS | Message exists and is truthy |
 | CMP-05 | Compress tool is pipeline compatible | Not in the non-pipeline-compatible list |
+| CMP-06 | Tier estimate contract | Low/Medium/High/Extra High estimates reflect 5-15, 20-40, 35-60, and up-to-90 guidance |
+| CMP-07 | Tier ordering expectation | On same fixture, extra-high output is smallest in most cases, followed by high, medium, low |
+| CMP-08 | PDF validity after compression | All tier outputs begin with `%PDF-` and are loadable by `PDFDocument.load()` |
+| CMP-09 | Safety fallback behavior | Failed/unsupported transforms are skipped without corrupting output |
 
 ---
 
@@ -267,6 +271,10 @@ npm run test
 | CMP-33 | High pipeline | high | Flatten → legacy convert → compress → image recompress → re-compress → dedup → strip metadata → strip non-essentials → remove unused → save |
 | CMP-34 | Progress steps medium | medium | Reports 5 progress steps |
 | CMP-35 | Progress steps high | high | Reports 10 progress steps |
+| CMP-36 | Progress steps extra-high | extra-high | Reports full extra-high path including aggressive image stage |
+| CMP-37 | Replace-only-if-smaller enforcement | all | Any transformed stream/image is replaced only when resulting bytes are smaller |
+| CMP-38 | Tier contract safety | all | Low excludes lossy passes; Medium remains conservative; High/Extra High apply increasingly aggressive options |
+| CMP-39 | Byte-delta instrumentation | all | Per-step byte deltas are available for tuning and diagnostics |
 
 ### UI Updates
 
@@ -286,6 +294,9 @@ npm run test
 | CMP-B3 | Upload small PDF, run Low | Quick completion, modest (~5–15%) savings |
 | CMP-B4 | Upload PDF with forms, run High | Forms flattened, metadata stripped, images recompressed |
 | CMP-B5 | Upload already-compressed PDF, run Medium | No-savings toast if output ≥ input |
+| CMP-B6 | Upload scan-heavy PDF, run Extra High | Best-case reduction can approach ~90% with visible quality tradeoff |
+| CMP-B7 | Compare all tiers on same scan-heavy file | Extra High <= High <= Medium <= Low size ordering |
+| CMP-B8 | Compare all tiers on text-heavy file | Smaller gains overall but no broken rendering |
 
 ---
 

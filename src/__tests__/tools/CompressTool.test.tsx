@@ -106,10 +106,10 @@ describe('CompressTool', () => {
     render(<CompressTool />);
     fireEvent.click(screen.getByTestId('mock-load'));
 
-    expect(screen.getByText(/Fast\. Re-saves with optimized structure/)).toBeInTheDocument();
-    expect(screen.getByText(/Recompresses streams at max level/)).toBeInTheDocument();
-    expect(screen.getByText(/Maximum\. Downsamples images/)).toBeInTheDocument();
-    expect(screen.getByText(/Extreme\. Converts images to grayscale/)).toBeInTheDocument();
+    expect(screen.getByText(/Fast baseline compression/)).toBeInTheDocument();
+    expect(screen.getByText(/Balanced mode\. Recompresses streams/)).toBeInTheDocument();
+    expect(screen.getByText(/Aggressive mode\./)).toBeInTheDocument();
+    expect(screen.getByText(/Extreme size reduction for scan-heavy files/)).toBeInTheDocument();
   });
 
   it('defaults to Medium compression level', () => {
@@ -163,7 +163,7 @@ describe('CompressTool', () => {
     // Switch to extra-high
     fireEvent.click(screen.getByDisplayValue('extra-high'));
 
-    expect(screen.getByText(/converts all color images to grayscale/)).toBeInTheDocument();
+    expect(screen.getByText(/prioritizes file size above visual fidelity/)).toBeInTheDocument();
   });
 
   it('does not show amber warning for other levels', () => {
@@ -172,15 +172,15 @@ describe('CompressTool', () => {
 
     // Check low
     fireEvent.click(screen.getByDisplayValue('low'));
-    expect(screen.queryByText(/converts all color images to grayscale/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/prioritizes file size above visual fidelity/)).not.toBeInTheDocument();
 
     // Check medium
     fireEvent.click(screen.getByDisplayValue('medium'));
-    expect(screen.queryByText(/converts all color images to grayscale/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/prioritizes file size above visual fidelity/)).not.toBeInTheDocument();
 
     // Check high
     fireEvent.click(screen.getByDisplayValue('high'));
-    expect(screen.queryByText(/converts all color images to grayscale/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/prioritizes file size above visual fidelity/)).not.toBeInTheDocument();
   });
 
   it('shows file size and estimated reduction', () => {
@@ -200,6 +200,17 @@ describe('CompressTool', () => {
 
     // Extra high estimates: 70-90%
     expect(screen.getByText(/70–90%/)).toBeInTheDocument();
+  });
+
+  it('shows updated medium and high estimate ranges', () => {
+    render(<CompressTool />);
+    fireEvent.click(screen.getByTestId('mock-load'));
+
+    fireEvent.click(screen.getByDisplayValue('medium'));
+    expect(screen.getByText(/20–40%/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByDisplayValue('high'));
+    expect(screen.getByText(/35–60%/)).toBeInTheDocument();
   });
 
   it('shows Compress PDF button after file load', () => {

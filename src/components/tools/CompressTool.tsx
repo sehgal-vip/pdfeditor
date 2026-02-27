@@ -15,16 +15,16 @@ import toast from 'react-hot-toast';
 type CompressionLevel = 'low' | 'medium' | 'high' | 'extra-high';
 
 const LEVEL_DESCRIPTIONS: Record<CompressionLevel, { label: string; description: string }> = {
-  low:          { label: 'Low', description: 'Fast. Re-saves with optimized structure.' },
-  medium:       { label: 'Medium', description: 'Recompresses streams at max level, deduplicates content.' },
-  high:         { label: 'High', description: 'Maximum. Downsamples images, strips metadata and non-essential data.' },
-  'extra-high': { label: 'Extra High', description: 'Extreme. Converts images to grayscale, aggressively downsizes. May reduce visual quality.' },
+  low:          { label: 'Low', description: 'Fast baseline compression. Optimizes stream structure with minimal quality risk.' },
+  medium:       { label: 'Medium', description: 'Balanced mode. Recompresses streams and selectively optimizes larger images.' },
+  high:         { label: 'High', description: 'Aggressive mode. Stronger image recompression plus metadata and object cleanup.' },
+  'extra-high': { label: 'Extra High', description: 'Extreme size reduction for scan-heavy files. Can significantly reduce visual quality.' },
 };
 
 const LEVEL_ESTIMATES: Record<CompressionLevel, { minPct: number; maxPct: number }> = {
   low:          { minPct: 5,  maxPct: 15 },
-  medium:       { minPct: 20, maxPct: 50 },
-  high:         { minPct: 35, maxPct: 70 },
+  medium:       { minPct: 20, maxPct: 40 },
+  high:         { minPct: 35, maxPct: 60 },
   'extra-high': { minPct: 70, maxPct: 90 },
 };
 
@@ -172,7 +172,7 @@ export function CompressTool() {
       {/* Extra-high warning */}
       {level === 'extra-high' && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          Warning: Extra High compression converts all color images to grayscale and aggressively reduces quality. The output may not be suitable for print or archival use.
+          Warning: Extra High prioritizes file size above visual fidelity. Output may show visible artifacts and may not be suitable for print or archival use.
         </p>
       )}
 

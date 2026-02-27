@@ -155,20 +155,27 @@
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
 | F-CP-01 | Upload PDF and see all 4 compression levels | Upload any PDF | Radio buttons for Low, Medium, High, and Extra High are shown |
-| F-CP-02 | Low compression | Upload PDF > select Low > Compress | Output PDF is smaller; minimal processing (re-save with optimized structure) |
-| F-CP-03 | Medium compression | Upload PDF > select Medium > Compress | Output PDF ~20–50% smaller; streams recompressed and deduplicated |
-| F-CP-04 | High compression | Upload PDF > select High > Compress | Output PDF ~35–70% smaller; images downsampled, metadata stripped |
-| F-CP-05 | Extra High compression | Upload PDF > select Extra High > Compress | Output PDF ~70–90% smaller; images grayscale + aggressively compressed |
+| F-CP-02 | Low compression baseline | Upload text+vector PDF > select Low > Compress | Output PDF is smaller with no visible degradation; target ~5–15% reduction |
+| F-CP-03 | Medium compression balanced | Upload mixed-content PDF > select Medium > Compress | Output PDF target ~20–40% reduction; visible quality change minimal |
+| F-CP-04 | High compression aggressive | Upload image-heavy PDF > select High > Compress | Output PDF target ~35–60% reduction with acceptable quality tradeoff |
+| F-CP-05 | Extra High extreme mode | Upload scan-heavy PDF > select Extra High > Compress | Output PDF can reach up to ~90% reduction on favorable inputs; quality warning applies |
 | F-CP-06 | Extra High warning shown | Select Extra High compression level | Amber warning text about grayscale conversion and quality loss appears |
 | F-CP-07 | Warning hidden for other levels | Select Low, Medium, or High | No amber warning about grayscale shown |
 | F-CP-08 | Options hidden for High | Select High compression | "Included in High compression" message shown; checkboxes hidden |
 | F-CP-09 | Options hidden for Extra High | Select Extra High compression | "Included in Extra High compression" message shown; checkboxes hidden |
 | F-CP-10 | Options visible for Low/Medium | Select Low or Medium | Strip metadata and Flatten forms checkboxes visible |
-| F-CP-11 | Estimate updates per level | Switch between levels | Estimate percentages update (Low: 5–15%, Medium: 20–50%, High: 35–70%, Extra High: 70–90%) |
+| F-CP-11 | Estimate updates per level | Switch between levels | Estimate ranges update (Low: 5–15%, Medium: 20–40%, High: 35–60%, Extra High: up to 90% on scan-heavy PDFs) |
 | F-CP-12 | Extra High forces stripMetadata and flattenForms | Select Extra High > Compress | Worker receives stripMetadata=true and flattenForms=true |
 | F-CP-13 | Extra High grayscale conversion | Upload image-heavy PDF > Extra High > Compress | Images in output are grayscale |
 | F-CP-14 | Extra High image quality/dimensions | Upload image-heavy PDF > Extra High > Compress | Images recompressed at quality 0.35, max dimension 1024px |
 | F-CP-15 | No savings warning | Upload already-optimized PDF > Compress | Warning toast: "Compression did not reduce file size" |
+| F-CP-16 | Tier size ordering | Run same PDF with Low, Medium, High, Extra High | Output sizes follow: Extra High <= High <= Medium <= Low (when compression is effective) |
+| F-CP-17 | Preserve PDF validity | Run all levels on same input | Every output starts with `%PDF-` and re-loads with PDFDocument.load without error |
+| F-CP-18 | Replace-only-if-smaller rule | Use PDF where some streams/images expand when recompressed | Those streams/images are kept original; file is not bloated by replacement |
+| F-CP-19 | Unsupported image safety | Compress PDF with unsupported image color spaces/filters | Compression skips unsupported images safely; output still renders |
+| F-CP-20 | Small image protection | Compress PDF containing many logos/icons | Small assets are preserved or conservatively processed; no severe icon artifacts |
+| F-CP-21 | High/Extra High semantic safety | Compress PDF with links/forms/metadata | Links still work; form flattening and metadata stripping follow selected tier contract |
+| F-CP-22 | Runtime efficiency guard | Compress large (100+ page) PDF in each tier | Operation completes without worker crash; progress updates remain responsive |
 
 ### 1.16 Pipeline System
 
